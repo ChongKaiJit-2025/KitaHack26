@@ -27,7 +27,8 @@ The application serves as a single-page dashboard where users can interact with 
 *   **Automated Push Notifications:** Implement Service Workers to send push notifications to the user's phone or desktop when an item's "Stomach Window" is about to close (e.g., "Drink that milk within 2 hours!").
 *   **AI Recipe Generation:** Add a feature where the concierge suggests zero-waste recipes using *only* the specific ingredients that are currently marked orange (close to their expiry time) in the Live Log.
 
-=====Reminder!!=====
+**=====REMINDER(IMPORTANT)=====**
+
 To run the code, remember to get your Google API Keys from https://aistudio.google.com/app/apikey and paste it in the quote as shown below.
 
 ![alt text](<Screenshot 2026-02-28 195425-1.png>)
