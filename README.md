@@ -29,6 +29,7 @@ The application serves as a single-page dashboard where users can interact with 
 
 *   ======Reminder!!=====
 To run the code, remember to get your Google API Keys from https://aistudio.google.com/app/apikey and paste it in the quote as shown below.
+
 ![alt text](<Screenshot 2026-02-28 195425-1.png>)
 
 ***Use PC platform(MacOS/Windows) for the best experience.
