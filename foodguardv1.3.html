@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Food Guardian: Your 24 Hour Stomach Concierge</title>
+    <title>Food Guardian: Your 24h Stomach Concierge</title>
     <style>
         body { background-color: #0d0d0d; color: #fff; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; }
         .container { max-width: 600px; margin: 0 auto; border: 1px solid #333; padding: 30px; border-radius: 20px; background: #161616; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -16,13 +16,18 @@
         }
         img { width: 100%; height: 100%; object-fit: contain; display: none; }
         
-        .action-btns { display: flex; gap: 10px; margin-bottom: 20px; }
+        /* Action Buttons */
+        .action-btns { display: flex; gap: 10px; margin-bottom: 15px; }
         button { 
             flex: 1; background: #00ff9d; color: #000; border: none; padding: 15px; 
             font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 10px;
         }
-        button:disabled { background: #333; color: #777; }
         .mic-btn { background: #fff; width: 60px; flex: 0; font-size: 20px; }
+
+        /* Reply Section (Typing) */
+        .reply-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .reply-input { flex: 1; padding: 12px; background: #000; border: 1px solid #333; color: #fff; border-radius: 8px; }
+        .send-btn { width: 80px; flex: 0; background: #444; color: #fff; }
 
         .chat-box { text-align: left; background: #222; padding: 20px; border-radius: 12px; border-left: 5px solid #00ff9d; min-height: 60px; margin-bottom: 20px; }
         .status-label { color: #00ff9d; font-size: 0.7em; font-weight: bold; margin-bottom: 8px; display: block; }
@@ -52,13 +57,18 @@
         <button class="mic-btn" onclick="startListening()">🎤</button>
     </div>
 
+    <div class="reply-group">
+        <input type="text" id="typeInput" class="reply-input" placeholder="Type your reply to the Concierge...">
+        <button class="send-btn" onclick="sendReply()">SEND</button>
+    </div>
+
     <div class="chat-box">
         <span class="status-label">CONCIERGE FEEDBACK:</span>
-        <div id="ai_output">I'm ready. Scan your food or tap the mic to chat.</div>
+        <div id="ai_output">Scan food or type/speak to start chatting.</div>
     </div>
 
     <div class="inventory-list">
-        <div style="color: #00ff9d; font-size: 0.8em; margin-bottom: 10px; font-weight: bold;">LIVE STOMACH CONCIERGE LOG:</div>
+        <div style="color: #00ff9d; font-size: 0.8em; margin-bottom: 10px; font-weight: bold;">LIVE LOG:</div>
         <div id="listItems"></div>
     </div>
 
@@ -69,12 +79,14 @@
 </div>
 
 <script>
-    const API_KEY = "AIzaSyAe_JNri58WC-RosdBEB2ScznziPCr07zY"; 
+    // --- 1. CONFIGURATION ---
+    const API_KEY = "AIzaSyBICrDbKZ6fv6sFUj0FDn7Hbku7IEsMUHE"; 
+    
     let inventory = [];
     let currentImage = "";
     let recognition;
 
-    // --- VOICE SETUP ---
+    // --- 2. VOICE SETUP ---
     if ('webkitSpeechRecognition' in window) {
         recognition = new webkitSpeechRecognition();
         recognition.onresult = (e) => sendToGemini(e.results[0][0].transcript);
@@ -85,7 +97,16 @@
         document.getElementById('ai_output').innerText = "Listening...";
     }
 
-    // --- IMAGE SETUP ---
+    // --- 3. TYPING SETUP ---
+    function sendReply() {
+        const text = document.getElementById('typeInput').value;
+        if(text) {
+            sendToGemini(text);
+            document.getElementById('typeInput').value = "";
+        }
+    }
+
+    // --- 4. IMAGE SETUP ---
     document.getElementById('imageInput').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
@@ -95,25 +116,23 @@
                 document.getElementById('preview').style.display = 'block';
                 document.getElementById('placeholder').style.display = 'none';
                 currentImage = event.target.result.split(',')[1];
-                sendToGemini("Initial Scan: What is this, is it safe to eat, and how long does it last?");
+                sendToGemini("Initial Scan: Identify food, check freshness, and estimate expiry.");
             };
             reader.readAsDataURL(file);
         }
     });
 
-    // --- AI LOGIC ---
+    // --- 5. AI LOGIC ---
     async function sendToGemini(userInput) {
         const output = document.getElementById('ai_output');
-        output.innerText = "Analyzing freshness...";
+        output.innerText = "Processing...";
 
         const prompt = `
             Role: Food Guardian (Stomach Concierge). 
-            Task: Analyze the food image. 
-            1. Identify the food. 
-            2. Evaluate if it's safe or spoiled. 
-            3. Estimate ExpiryHours. 
-            4. If the user confirms an item, end with: DATA|ItemName|ExpiryHours|Status
-
+            Task: Analyze image and text. 
+            1. If unsafe/spoiled, warn. 
+            2. If user confirms item, end ONLY the final sentence with: DATA|ItemName|ExpiryHours|Status
+            Status should be 'Safe', 'Eat Soon', or 'Spoiled'.
             Remember to give short and simple replies for user confirmation, and a few suggestions are okkay, just dont format it because it will literally sing out every single marks.
         `;
 
@@ -140,9 +159,11 @@
         } catch (e) { output.innerText = "Error connecting to AI."; }
     }
 
+    // --- 6. DATABASE & UI ---
     function addToDatabase(name, hours, status) {
         const item = {
             name: name.trim(),
+            entryTime: new Date(),
             expiry: new Date(Date.now() + (parseInt(hours) * 3600000)),
             status: status.trim()
         };
@@ -162,10 +183,10 @@
 
             list.innerHTML += `
                 <div class="inv-item">
-                    <div><strong>${item.name}</strong><br><small>Expires in ${hoursLeft}h</small></div>
+                    <div><strong>${item.name}</strong><br><small>Stomach Window: ${hoursLeft}h left</small></div>
                     <b style="color:${color}">${hoursLeft <= 0 ? 'DANGER' : item.status}</b>
                 </div>`;
-            totalWaste += 0.5; // Estimated 0.5kg per item saved
+            totalWaste += 0.5; 
         });
 
         document.getElementById('savedCount').innerText = inventory.length;
