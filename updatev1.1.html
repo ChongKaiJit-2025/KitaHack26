@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Guardian: Your 24 Hour Stomach Concierge </title>
+    <style>
+        body { background-color: #0d0d0d; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; border: 1px solid #333; padding: 30px; border-radius: 20px; background: #161616; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { color: hwb(39 0% 0%); margin-bottom: 5px; letter-spacing: 2px; }
+        
+        .camera-box { 
+            width: 100%; height: 300px; background: #000; border: 2px solid #333; 
+            margin: 20px 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 15px;
+        }
+        img { width: 100%; height: 100%; object-fit: contain; display: none; }
+        
+        .action-btns { display: flex; gap: 10px; margin-bottom: 20px; }
+        button { 
+            flex: 1; background: #00ff9d; color: #000; border: none; padding: 15px; 
+            font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 10px;
+        }
+        button:disabled { background: #333; color: #777; }
+        .mic-btn { background: #fff; width: 60px; flex: 0; }
+
+        .chat-box { text-align: left; background: #222; padding: 20px; border-radius: 12px; border-left: 5px solid #00ff9d; min-height: 80px; margin-bottom: 20px; }
+        .status-label { color: #00ff9d; font-size: 0.7em; font-weight: bold; margin-bottom: 8px; display: block; }
+        .ai-text { font-size: 1.1em; line-height: 1.5; color: #eee; }
+
+        .inventory-list { text-align: left; border-top: 1px solid #333; padding-top: 20px; }
+        .inv-item { padding: 10px; background: #252525; margin-bottom: 5px; border-radius: 5px; font-size: 0.9em; display: flex; justify-content: space-between; }
+        
+        .listening-ring { color: red; font-weight: bold; animation: blink 1s infinite; display: none; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Food Guardian <span style="font-weight: 300;">AI</span></h1>
+    <div id="listenStatus" class="listening-ring">● LIVE LISTENING</div>
+
+    <div class="camera-box">
+        <p id="placeholder" style="color:#444">[ CAMERA FEED STANDBY ]</p>
+        <img id="preview">
+    </div>
+
+    <input type="file" id="imageInput" accept="image/*" style="display:none">
+    
+    <div class="action-btns">
+        <button id="scanBtn" onclick="document.getElementById('imageInput').click()">📸 SCAN AREA</button>
+        <button id="micBtn" class="mic-btn" onclick="startListening()">🎤</button>
+    </div>
+
+    <div class="chat-box">
+        <span class="status-label">KITCHEN GUARDIAN:</span>
+        <div id="ai_output" class="ai-text">Tap the microphone or scan food to start chatting.</div>
+    </div>
+
+    <div class="inventory-list">
+        <div style="color: #00ff9d; font-size: 0.8em; margin-bottom: 10px;">VERIFIED INVENTORY:</div>
+        <div id="listItems"></div>
+    </div>
+</div>
+
+<script>
+    // --- 1. CONFIGURATION ---
+    const API_KEY = "AIzaSyAe_JNri58WC-RosdBEB2ScznziPCr07zY"; 
+    
+    // --- 2. GLOBAL STATE ---
+    let currentImage = "";
+    let isWaitingForReply = false;
+    let recognition;
+
+    // --- 3. SPEECH RECOGNITION SETUP (Listening) ---
+    if ('webkitSpeechRecognition' in window) {
+        recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+            document.getElementById('listenStatus').style.display = 'block';
+            document.getElementById('ai_output').innerText = "Listening to you...";
+        };
+
+        recognition.onresult = (event) => {
+            const userText = event.results[0][0].transcript;
+            document.getElementById('listenStatus').style.display = 'none';
+            handleVoiceCommand(userText);
+        };
+
+        recognition.onerror = () => {
+            document.getElementById('listenStatus').style.display = 'none';
+            document.getElementById('ai_output').innerText = "Sorry, I couldn't hear you.";
+        };
+    }
+
+    function startListening() {
+        if (recognition) recognition.start();
+        else alert("Speech recognition not supported in this browser. Use Chrome.");
+    }
+
+    // --- 4. IMAGE HANDLING ---
+    document.getElementById('imageInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                document.getElementById('preview').src = event.target.result;
+                document.getElementById('preview').style.display = 'block';
+                document.getElementById('placeholder').style.display = 'none';
+                currentImage = event.target.result.split(',')[1];
+                
+                // Initial Scan
+                sendToGemini(currentImage, "Initial Scan: Identify food items.");
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    // --- 5. VOICE COMMAND LOGIC ---
+    function handleVoiceCommand(text) {
+        document.getElementById('ai_output').innerText = `You said: "${text}"`;
+        
+        // If the AI previously asked a question, we send the reply to Gemini
+        if (isWaitingForReply && currentImage) {
+            sendToGemini(currentImage, `The user replied: "${text}". Confirm the item or ask for more detail.`);
+        } else {
+            // General query
+            sendToGemini(currentImage, `User says: "${text}". If it's about food, explain or help.`);
+        }
+    }
+
+    // --- 6. CORE AI ENGINE (Gemini) ---
+    async function sendToGemini(imageBase64, promptText) {
+        const aiOutput = document.getElementById('ai_output');
+        aiOutput.innerText = "Analyzing...";
+
+        const systemRole = "You are SisaSifar, a kitchen AI. If the user confirms a food item, end your sentence with the word 'LOGGED'. If you aren't sure, ask a question.";
+
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { text: systemRole + "\n\nUser Message: " + promptText },
+                            { inline_data: { mime_type: "image/jpeg", data: imageBase64 } }
+                        ]
+                    }]
+                })
+            });
+
+            const data = await response.json();
+            const aiResponse = data.candidates[0].content.parts[0].text;
+            
+            aiOutput.innerText = aiResponse;
+            speak(aiResponse);
+
+            // LOGIC: Only log if AI says "LOGGED"
+            if (aiResponse.toUpperCase().includes("LOGGED")) {
+                isWaitingForReply = false;
+                addToInventory(aiResponse);
+            } else {
+                isWaitingForReply = true; // Stay in conversation mode
+            }
+
+        } catch (error) {
+            aiOutput.innerText = "Connection failed. Check API key.";
+        }
+    }
+
+    // --- 7. UTILITIES ---
+    function speak(text) {
+        const msg = new SpeechSynthesisUtterance(text);
+        window.speechSynthesis.speak(msg);
+    }
+
+    function addToInventory(fullText) {
+        const list = document.getElementById('listItems');
+        const div = document.createElement('div');
+        div.className = 'inv-item';
+        // Clean the string for the list
+        const cleanName = fullText.split('.')[0].replace('LOGGED', '').trim();
+        div.innerHTML = `<span>🍲 ${cleanName}</span> <span style="color:#888">Verified</span>`;
+        list.prepend(div);
+    }
+</script>
+
+</body>
+</html>
